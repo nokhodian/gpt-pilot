@@ -611,9 +611,9 @@ def stream_anthropic(messages, function_call_message, gpt_data, model_name = "cl
         import anthropic
     except ImportError as err:
         raise RuntimeError("The 'anthropic' package is required to use the Anthropic Claude LLM.") from err
-
+    base_url_anthropic=os.getenv('ANTHROPIC_ENDPOINT')
     client = anthropic.Anthropic(
-        base_url=os.getenv('ANTHROPIC_ENDPOINT') or None,
+        base_url=base_url_anthropic or None,
     )
 
     claude_system = "You are a software development AI assistant."
@@ -632,16 +632,46 @@ def stream_anthropic(messages, function_call_message, gpt_data, model_name = "cl
         claude_messages = cm2
 
     response = ""
-    with client.messages.stream(
-        model=model_name,
-        max_tokens=4096,
-        temperature=0.5,
-        system=claude_system,
-        messages=claude_messages,
-    ) as stream:
-        for chunk in stream.text_stream:
-            print(chunk, type='stream', end='', flush=True)
-            response += chunk
+   
+    
+    if(base_url_anthropic is not None):
+        headers = {
+        "Content-Type": "application/json"
+        }
+        claude_request = {
+            "model" : "anthropic.claude-3-sonnet-20240229-v1:0",
+            "max_tokens": 4096,
+            "temperature":0.5,
+            "system":claude_system,
+            "messages":claude_messages
+        }
+
+     
+        with requests.post(base_url_anthropic, data=json.dumps(claude_request), headers=headers, stream=True) as resp:
+            
+            resp.raise_for_status()
+            
+            # Stream the response content
+            for chunk in resp.iter_lines(decode_unicode=True):
+                if chunk:
+                    print(chunk, type='stream', end='', flush=True)
+                    response += chunk
+
+    else:
+        with client.messages.stream(
+            model=model_name,
+            max_tokens=4096,
+            temperature=0.5,
+            system=claude_system,
+            messages=claude_messages,
+        ) as stream:
+            for chunk in stream.text_stream:
+                print(chunk, type='stream', end='', flush=True)
+                response += chunk
+
+  
+
+
 
     if function_call_message is not None:
         response = clean_json_response(response)
